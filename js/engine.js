@@ -96,13 +96,17 @@ export function globalMult(s, rating = ratingFromXp(s.xp)) {
 
 export const tpPerPass = (s, streak, rating) => techBase(s) * streakMult(s, streak) * globalMult(s, rating);
 export const attemptsPerSec = s => ballCount(s) * passRatePerBall(s);
-export const tpPerSec = (s, streak, rating) => attemptsPerSec(s) * successRate(s) * tpPerPass(s, streak, rating);
-
-// Average streak a player sits on, used for display and simulation.
+// Long-run mean streak at the moment of a successful pass. A miss resets the
+// streak, so the chance of reaching streak k is p^k. Summing those chances
+// gives the capped geometric mean and keeps economy independent of frame rate.
 export function expectedStreak(s) {
   const p = successRate(s);
-  return Math.min(p / (1 - p), streakCap(s));
+  const cap = Math.max(0, Math.floor(streakCap(s)));
+  if (!cap) return 0;
+  return p * (1 - Math.pow(p, cap)) / (1 - p);
 }
+
+export const tpPerSec = (s, streak, rating) => attemptsPerSec(s) * successRate(s) * tpPerPass(s, streak, rating);
 
 // ---------- Costs ----------
 
@@ -163,10 +167,13 @@ export function buyOneOff(s, id) {
 // ---------- Tick ----------
 
 // Advance the game by dt seconds. Returns a list of events for the UI.
-export function tick(s, dt, streak = s.streak) {
+export function tick(s, dt) {
   const events = [];
+  if (!Number.isFinite(dt) || dt <= 0) return events;
   const before = s.highestRating;
-  const gain = tpPerSec(s, streak, before) * dt;
+  // The visible streak is an animation across a capped number of balls. Use
+  // the expected streak for the economy so hidden/fast balls count fairly.
+  const gain = tpPerSec(s, expectedStreak(s), before) * dt;
   s.tp += gain;
   s.xp += gain;
   const att = attemptsPerSec(s) * dt, p = successRate(s);
@@ -209,13 +216,38 @@ export function ballColors(s, fallback) {
 // Merge a loaded save with defaults so new fields are always present.
 export function migrate(loaded) {
   const base = newState();
-  if (!loaded || typeof loaded !== 'object') return base;
+  if (!loaded || typeof loaded !== 'object' || Array.isArray(loaded)) return base;
   const s = { ...base, ...loaded };
-  s.levels = { ...base.levels, ...(loaded.levels || {}) };
-  s.owned = { ...base.owned, ...(loaded.owned || {}) };
-  s.settings = { ...base.settings, ...(loaded.settings || {}) };
+  const record = value => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const levels = record(loaded.levels);
+  s.levels = { ...base.levels };
+  for (const key of Object.keys(base.levels)) {
+    const value = Number(levels[key]);
+    s.levels[key] = Number.isFinite(value) ? Math.max(0, Math.min(1e9, Math.floor(value))) : 0;
+  }
+  const owned = record(loaded.owned);
+  s.owned = { ...base.owned };
+  for (const item of allOneOffs()) s.owned[item.id] = owned[item.id] === true;
+  s.owned.g0 = true;
+  const settings = record(loaded.settings);
+  s.settings = {
+    sfx: typeof settings.sfx === 'boolean' ? settings.sfx : base.settings.sfx,
+    music: typeof settings.music === 'boolean' ? settings.music : base.settings.music,
+    volume: Number.isFinite(Number(settings.volume)) ? Math.max(0, Math.min(1, Number(settings.volume))) : base.settings.volume,
+    notation: ['short', 'sci'].includes(settings.notation) ? settings.notation : base.settings.notation,
+    reducedMotion: typeof settings.reducedMotion === 'boolean' ? settings.reducedMotion : base.settings.reducedMotion,
+    buyAmount: [1, 10, 100, 'max'].includes(settings.buyAmount) ? settings.buyAmount : base.settings.buyAmount,
+  };
   s.v = SAVE_VERSION;
-  for (const k of ['tp', 'xp', 'passes', 'misses', 'playTime']) if (!isFinite(s[k])) s[k] = 0;
+  for (const k of ['tp', 'xp', 'passes', 'misses', 'playTime']) {
+    const value = Number(s[k]);
+    s[k] = Number.isFinite(value) ? Math.max(0, value) : 0;
+  }
+  const startedAt = Number(s.startedAt);
+  s.startedAt = Number.isFinite(startedAt) && startedAt > 0 ? startedAt : base.startedAt;
+  s.streak = Number.isFinite(Number(s.streak)) ? Math.max(0, Math.floor(Number(s.streak))) : 0;
+  s.bestStreak = Number.isFinite(Number(s.bestStreak)) ? Math.max(s.streak, Math.floor(Number(s.bestStreak))) : s.streak;
+  s.upgradesBought = Number.isFinite(Number(s.upgradesBought)) ? Math.max(0, Math.floor(Number(s.upgradesBought))) : 0;
   s.highestRating = Math.max(1, ratingFromXp(s.xp));
   return s;
 }

@@ -19,7 +19,7 @@ let state = load() || E.newState();
 const scene = new Scene($('scene'), $('overlay'));
 const game = {
   get state() { return state; },
-  tps: () => E.tpPerSec(state, state.streak, state.highestRating),
+  tps: () => E.tpPerSec(state, E.expectedStreak(state), state.highestRating),
   onBuy(id, n) {
     if (E.buyUpgrade(state, id, n)) { audio.buy(); syncScene(); ui.refresh(); ui.flash(id); }
   },
@@ -172,8 +172,8 @@ function updateHud() {
 
   $('streak').textContent = fmt(s.streak);
   $('streak-chip').classList.toggle('hot', s.streak >= 20);
-  $('tpp').textContent = fmt(E.tpPerPass(s, s.streak, s.highestRating), 1);
-  $('streak-mult').textContent = 'x' + E.streakMult(s, s.streak).toFixed(2);
+  $('tpp').textContent = fmt(E.tpPerPass(s, E.expectedStreak(s), s.highestRating), 1);
+  $('streak-mult').textContent = 'AVG x' + E.streakMult(s, E.expectedStreak(s)).toFixed(2);
   const balls = E.ballCount(s);
   $('balls').textContent = balls > MAX_VISIBLE_BALLS ? `${fmt(balls)} (${MAX_VISIBLE_BALLS} shown)` : balls;
   $('success').textContent = pct(E.successRate(s));
@@ -190,7 +190,7 @@ function frame(now) {
   if (!document.hidden) {
     const s = state;
     scene.update(dt, Math.min(E.passRatePerBall(s), MAX_VISUAL_RATE), E.successRate(s), onPass);
-    handleEvents(E.tick(s, dt, s.streak));
+    handleEvents(E.tick(s, dt));
     scene.draw();
     hudTimer += dt; uiTimer += dt; saveTimer += dt;
     if (hudTimer > 0.1) { hudTimer = 0; updateHud(); }
