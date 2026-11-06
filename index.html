@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Ballking</title>
+  <meta name="description" content="Pixel football idle game. Pass against the wall, upgrade, and climb from street kid to the greatest of all time.">
+  <meta name="theme-color" content="#11141c">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8' shape-rendering='crispEdges'%3E%3Crect x='2' y='0' width='4' height='8' fill='%23fff'/%3E%3Crect x='0' y='2' width='8' height='4' fill='%23fff'/%3E%3Crect x='1' y='1' width='6' height='6' fill='%23fff'/%3E%3Crect x='3' y='3' width='2' height='2' fill='%23111'/%3E%3Crect x='1' y='1' width='1' height='1' fill='%23111'/%3E%3Crect x='6' y='6' width='1' height='1' fill='%23111'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="logo">BALL<span>KING</span></div>
+    <div class="stat-main">
+      <div class="tp" id="tp">0</div>
+      <div class="tp-label">TRAINING POINTS <span id="tps">+0/s</span></div>
+    </div>
+    <div class="stat-side">
+      <div><span id="pps">0</span> passes/s</div>
+      <div id="paused-hint" class="muted">Training runs only while this tab is open</div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="stage">
+      <div class="card" id="player-card">
+        <div class="rating-box">
+          <div class="rating" id="rating">1</div>
+          <div class="rating-label">RATING</div>
+        </div>
+        <div class="card-info">
+          <div class="player-name" id="player-name">Ravi</div>
+          <div class="player-meta" id="player-meta">IND</div>
+          <div class="bar"><div class="bar-fill" id="xp-bar"></div></div>
+          <div class="bar-text"><span id="xp-text">0 / 10</span><span id="next-player"></span></div>
+        </div>
+      </div>
+
+      <div class="scene-wrap">
+        <canvas id="scene" width="320" height="180" aria-label="Training scene"></canvas>
+        <div class="scene-overlay" id="overlay"></div>
+        <div class="banner hidden" id="banner"></div>
+      </div>
+
+      <div class="scene-info">
+        <div class="chip"><span class="k">STREAK</span> <span id="streak">0</span> <span class="gold" id="streak-mult">x1.00</span></div>
+        <div class="chip"><span class="k">BALLS</span> <span id="balls">1</span></div>
+        <div class="chip"><span class="k">SUCCESS</span> <span id="success">60%</span></div>
+        <div class="chip"><span class="k">GROUND</span> <span id="ground-name">Backyard Wall</span></div>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <nav class="tabs" id="tabs">
+        <button data-view="upgrades" class="active">Upgrades</button>
+        <button data-view="career">Career</button>
+        <button data-view="stats">Stats</button>
+        <button data-view="settings">Settings</button>
+      </nav>
+      <div class="view" id="view"></div>
+    </aside>
+  </main>
+
+  <div id="toasts" class="toasts"></div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
