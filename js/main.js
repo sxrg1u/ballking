@@ -9,6 +9,8 @@ import { save, load, wipe, exportSave, importSave } from './save.js';
 import { COUNTRIES } from './stars.js';
 import { icon } from './icons.js';
 import { drawPortrait } from './sprites.js';
+import { flagImg } from './flags.js';
+import { starLook } from './ui.js';
 
 
 const $ = id => document.getElementById(id);
@@ -71,7 +73,12 @@ function syncScene() {
     drawPortrait($('portrait'), scene.look);
     const k = scene.look.kit;
     $('fut-kit').style.background = `linear-gradient(90deg, ${k.shirt} 0 50%, ${k.shorts} 50%)`;
-    $('fut-nation').textContent = E.currentStar(state.highestRating).nation;
+    const st = E.currentStar(state.highestRating);
+    $('fut-nation').innerHTML = flagImg(st.nation, 2);
+    $('fut-num').textContent = '#' + st.num;
+    const nx = E.nextStar(state.highestRating);
+    if (nx) drawPortrait($('next-face'), nx.rating === 99 ? { ...starLook(nx), kit: { shirt: '#333333', shorts: '#222222', socks: '#222222' }, hair: '#222222', skin: 1 } : starLook(nx));
+    $('next-face').style.display = nx ? '' : 'none';
   }
   $('fut').classList.toggle('legend', state.highestRating >= 99);
   scene.ground = GROUNDS[E.activeGround(state)].id;
@@ -126,7 +133,7 @@ function handleEvents(events) {
     if (ev.type === 'star') {
       const st = ev.star;
       if (st.rating === 99) banner('THE GREATEST', st.name, 'You made it. Now become even better.');
-      else banner('NEW PLAYER', st.name, `${COUNTRIES[st.nation] || st.nation} &middot; Rating ${st.rating}`);
+      else banner('NEW PLAYER', st.name, `#${st.num} &middot; ${flagImg(st.nation, 2)} ${COUNTRIES[st.nation]} &middot; from ${st.from} &middot; Rating ${st.rating}`);
       audio.cheer(true);
       scene.confetti(140);
       syncScene();
@@ -153,11 +160,15 @@ function updateHud() {
   const next = E.nextStar(s.highestRating);
   $('rating').textContent = s.highestRating;
   $('player-name').textContent = star.name;
-  $('player-meta').textContent = (star.origin || COUNTRIES[star.nation] || star.nation) +
-    (s.highestRating >= 99 ? `  ★ x${s.highestRating - 99}` : '');
+  const meta = `<span class="num">#${star.num}</span><span>${flagImg(star.nation, 2)} ${COUNTRIES[star.nation]}</span><span>from ${star.street ? 'Mumbai streets, age 14' : star.from}</span>` +
+    (s.highestRating >= 99 ? `<span class="num">\u2605 x${s.highestRating - 99}</span>` : '');
+  if ($('player-meta').dataset.h !== meta) { $('player-meta').innerHTML = meta; $('player-meta').dataset.h = meta; }
   $('xp-bar').style.width = (prog.frac * 100).toFixed(1) + '%';
   $('xp-text').textContent = `${fmt(s.xp - prog.from)} / ${fmt(prog.to - prog.from)}  (${Math.floor(prog.frac * 100)}%)`;
-  $('next-player').innerHTML = next ? `Next player: <b>${next.rating === 99 ? '???' : next.name}</b> at rating ${next.rating}` : `Legend mode: <b>rating ${s.highestRating + 1}</b> next`;
+  const nextHtml = next
+    ? (next.rating === 99 ? `Next: <b>???</b> at rating 99` : `Next: <b>${next.name}</b> <span class="num">#${next.num}</span> ${flagImg(next.nation, 2)} from ${next.from} &middot; rating ${next.rating}`)
+    : `Legend mode: <b>rating ${s.highestRating + 1}</b> next`;
+  if ($('next-player').dataset.h !== nextHtml) { $('next-player').innerHTML = nextHtml; $('next-player').dataset.h = nextHtml; }
 
   $('streak').textContent = fmt(s.streak);
   $('streak-chip').classList.toggle('hot', s.streak >= 20);

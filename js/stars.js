@@ -113,6 +113,41 @@ export const STARS = [
   p('Lionel Messi', 'ARG', 99, 1, BROWN, 'short', true),
 ];
 
+// Shirt number and home town for every player (number = the one most
+// associated with them; game data only).
+const INFO = {
+  'Ravi': [17, 'Mumbai'],
+  'Udanta Singh': [15, 'Manipur'], 'Sahal Abdul Samad': [18, 'Al Ain, UAE'],
+  'Lallianzuala Chhangte': [7, 'Mizoram'], 'Anirudh Thapa': [7, 'Dehradun'],
+  'Liston Colaco': [17, 'Goa'], 'Sandesh Jhingan': [5, 'Chandigarh'],
+  'Bhaichung Bhutia': [15, 'Sikkim'], 'Sunil Chhetri': [11, 'Secunderabad'],
+  'Omar Abdulrahman': [10, 'Riyadh, Saudi Arabia'], 'Ali Mabkhout': [7, 'Abu Dhabi'],
+  'Almoez Ali': [19, 'Khartoum, Sudan'], 'Salem Al-Dawsari': [10, 'Riyadh'],
+  'Akram Afif': [11, 'Doha'], 'Mehdi Taremi': [9, 'Bushehr'],
+  'Takumi Minamino': [10, 'Osaka'], 'Kaoru Mitoma': [7, 'Kawasaki'],
+  'Takefusa Kubo': [20, 'Kawasaki'], 'Kim Min-jae': [4, 'Tongyeong'],
+  'Christian Pulisic': [10, 'Hershey, Pennsylvania'], 'Alphonso Davies': [19, 'Buduburam, Ghana'],
+  'Hakim Ziyech': [7, 'Dronten, Netherlands'], 'Achraf Hakimi': [2, 'Madrid, Spain'],
+  'Riyad Mahrez': [7, 'Sarcelles, France'], 'Sadio Mane': [10, 'Bambali'],
+  'Federico Valverde': [15, 'Montevideo'], 'Son Heung-min': [7, 'Chuncheon'],
+  'Thomas Muller': [25, 'Weilheim'], 'Bernardo Silva': [10, 'Lisbon'],
+  'Phil Foden': [47, 'Stockport'], 'Bukayo Saka': [7, 'London'],
+  'Florian Wirtz': [10, 'Pulheim'], 'Jamal Musiala': [10, 'Stuttgart'],
+  'Pedri': [8, 'Tenerife'], 'Antoine Griezmann': [7, 'Macon'],
+  'Rodri': [16, 'Madrid'], 'Virgil van Dijk': [4, 'Breda'],
+  'Toni Kroos': [8, 'Greifswald'], 'Lamine Yamal': [19, 'Esplugues de Llobregat'],
+  'Jude Bellingham': [5, 'Stourbridge'], 'Vinicius Junior': [7, 'Sao Goncalo'],
+  'Harry Kane': [9, 'London'], 'Robert Lewandowski': [9, 'Warsaw'],
+  'Karim Benzema': [9, 'Lyon'], 'Mohamed Salah': [11, 'Nagrig'],
+  'Luka Modric': [10, 'Zadar'], 'Kevin De Bruyne': [17, 'Ghent'],
+  'Erling Haaland': [9, 'Leeds, England'], 'Xavi': [6, 'Terrassa'],
+  'Andres Iniesta': [8, 'Fuentealbilla'], 'Neymar': [10, 'Mogi das Cruzes'],
+  'Kylian Mbappe': [10, 'Paris'], 'Zinedine Zidane': [10, 'Marseille'],
+  'Ronaldinho': [10, 'Porto Alegre'], 'Cristiano Ronaldo': [7, 'Funchal, Madeira'],
+  'Lionel Messi': [10, 'Rosario'],
+};
+for (const st of STARS) { const [num, from] = INFO[st.name] || [10, '']; st.num = num; st.from = from; }
+
 export const MESSI_RATING = 99;
 
 export const COUNTRIES = {

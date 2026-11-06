@@ -5,6 +5,7 @@ import * as E from './engine.js';
 import { fmt, fmtTime, pct } from './format.js';
 import { img } from './icons.js';
 import { drawPortrait } from './sprites.js';
+import { flagImg } from './flags.js';
 import { thumbnail } from './backgrounds.js';
 import { MILESTONE_EVERY } from './config.js';
 
@@ -181,7 +182,7 @@ export class UI {
       const state = st === cur ? 'current' : st.rating < cur.rating ? 'done' : 'locked';
       const label = state === 'current' ? 'YOU' : state === 'done' ? 'Played' : 'Rating ' + st.rating;
       h += `<li class="${state}"><span class="r">${st.rating}</span><canvas data-star="${i}" width="40" height="40"></canvas>
-        <span class="n">${state === 'locked' && st.rating === 99 ? '???' : st.name}<small>${st.origin || COUNTRIES[st.nation]}</small></span>
+        <span class="n">${state === 'locked' && st.rating === 99 ? '???' : st.name}<small><span class="num">#${st.num}</span> ${flagImg(st.nation, 1)} ${COUNTRIES[st.nation]} &middot; ${st.street ? 'Mumbai streets' : st.from}</small></span>
         <span class="s">${label}</span></li>`;
     });
     h += r >= 99
