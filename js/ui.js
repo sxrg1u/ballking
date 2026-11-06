@@ -227,7 +227,13 @@ export class UI {
       if (!box.value.trim()) return toast('Paste a save code first.');
       if (!this.g.onImport(box.value)) toast('That save code did not work.');
     }
-    if (act === 'reset' && confirm('Delete your whole career? This cannot be undone.')) this.g.onReset();
+    // Two-step delete (browser confirm dialogs are not available everywhere)
+    if (act === 'reset') {
+      if (t.dataset.armed) { this.g.onReset(); return; }
+      t.dataset.armed = '1';
+      t.textContent = 'Click again to delete';
+      setTimeout(() => { if (t.isConnected) { delete t.dataset.armed; t.textContent = 'Delete save'; } }, 4000);
+    }
   }
 
   onInput(e) {
