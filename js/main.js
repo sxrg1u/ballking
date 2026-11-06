@@ -182,16 +182,36 @@ function updateHud() {
 }
 
 // ---------- Loop ----------
-let last = performance.now(), hudTimer = 0, uiTimer = 0, saveTimer = 0;
+// Training is based on the real clock, so it keeps running while the tab is
+// open in the background (browsers slow down background tabs a lot, so the
+// missed time is caught up on the next step). Closing the tab stops it.
+// A single gap longer than MAX_GAP (e.g. the computer was asleep) only
+// counts up to MAX_GAP.
+const MAX_GAP = 300;
+let last = performance.now(), lastLogic = Date.now(), hudTimer = 0, uiTimer = 0, saveTimer = 0;
+let awayTp = 0, awayStart = 0;
+
+function logicStep() {
+  const now = Date.now();
+  let gap = Math.min(MAX_GAP, Math.max(0, (now - lastLogic) / 1000));
+  lastLogic = now;
+  const s = state;
+  const before = s.tp;
+  while (gap > 0) {
+    const dt = Math.min(1, gap);
+    gap -= dt;
+    handleEvents(E.tick(s, dt));
+  }
+  if (document.hidden) awayTp += s.tp - before;
+}
 
 function frame(now) {
-  // Cap the step so switching tabs never gives free progress.
   const dt = Math.min(1, (now - last) / 1000);
   last = now;
   if (!document.hidden) {
     const s = state;
     scene.update(dt, Math.min(E.passRatePerBall(s), MAX_VISUAL_RATE), E.successRate(s), onPass);
-    handleEvents(E.tick(s, dt));
+    logicStep();
     scene.draw();
     hudTimer += dt; uiTimer += dt; saveTimer += dt;
     if (hudTimer > 0.1) { hudTimer = 0; updateHud(); }
@@ -201,10 +221,26 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
+// Background ticker: keeps training going while the tab is hidden.
+let bgSaves = 0;
+setInterval(() => {
+  if (!document.hidden) return;
+  logicStep();
+  if (++bgSaves % 10 === 0) save(state);
+}, 1000);
+
 document.addEventListener('visibilitychange', () => {
   audio.setPaused(document.hidden);
-  if (document.hidden) save(state);
-  last = performance.now();
+  if (document.hidden) {
+    save(state);
+    awayTp = 0; awayStart = Date.now();
+  } else {
+    logicStep(); // catch up the last bit
+    last = performance.now();
+    const secs = (Date.now() - awayStart) / 1000;
+    if (awayTp > 0 && secs > 5) toast(`Welcome back! ${E.currentStar(state.highestRating).name} kept training: <b>+${fmt(awayTp)} TP</b> while you were away.`);
+    updateHud(); ui.refresh();
+  }
 });
 window.addEventListener('beforeunload', () => save(state));
 

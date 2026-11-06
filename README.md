@@ -8,7 +8,7 @@ buy gear, coaches and new training grounds, and climb a ladder of 55 real
 football players. Lionel Messi waits at rating 99, roughly 135 hours of active
 training away. After that it never ends.
 
-- Training only runs while the tab is open and visible (no offline progress).
+- Training runs while the tab is open, also in a background tab. Closing the tab stops it (no offline progress).
 - Saves automatically in your browser. Export/Import in Settings.
 
 ## Play

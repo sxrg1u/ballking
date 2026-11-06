@@ -279,7 +279,7 @@ export class UI {
       <div class="about">BALLKING is an unofficial fan game made for fun. It is not affiliated with,
         endorsed by or connected to any player, club, league or federation. Player names are only
         used as career milestones; all graphics are generic pixel figures.<br><br>
-        Training only runs while this tab is open and visible. No offline progress.</div>`;
+        Training keeps running while this tab is open, also in the background. Closing the tab stops it (no offline progress).</div>`;
   }
 
   // ---------- Events ----------
