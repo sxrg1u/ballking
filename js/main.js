@@ -185,9 +185,9 @@ function updateHud() {
 // Training is based on the real clock, so it keeps running while the tab is
 // open in the background (browsers slow down background tabs a lot, so the
 // missed time is caught up on the next step). Closing the tab stops it.
-// A single gap longer than MAX_GAP (e.g. the computer was asleep) only
-// counts up to MAX_GAP.
-const MAX_GAP = 300;
+// Browsers may freeze background tabs completely, so the whole time the tab
+// was open is caught up when it wakes again (up to MAX_GAP per gap).
+const MAX_GAP = 12 * 3600;
 let last = performance.now(), lastLogic = Date.now(), hudTimer = 0, uiTimer = 0, saveTimer = 0;
 let awayTp = 0, awayStart = 0;
 
@@ -197,10 +197,24 @@ function logicStep() {
   lastLogic = now;
   const s = state;
   const before = s.tp;
+  // Long gaps run in at most ~2000 steps; their events are merged so the
+  // player gets one banner instead of dozens.
+  const step = Math.max(1, gap / 2000);
+  const evs = [];
   while (gap > 0) {
-    const dt = Math.min(1, gap);
+    const dt = Math.min(step, gap);
     gap -= dt;
-    handleEvents(E.tick(s, dt));
+    evs.push(...E.tick(s, dt));
+  }
+  if (evs.length <= 1) { handleEvents(evs); }
+  else {
+    const ratings = evs.filter(e => e.type === 'rating');
+    const stars = evs.filter(e => e.type === 'star');
+    const merged = [];
+    if (ratings.length) merged.push({ type: 'rating', from: ratings[0].from, to: ratings[ratings.length - 1].to });
+    if (stars.length) merged.push(stars[stars.length - 1]);
+    merged.push(...evs.filter(e => e.type === 'unlock').slice(-3));
+    handleEvents(merged);
   }
   if (document.hidden) awayTp += s.tp - before;
 }
@@ -222,12 +236,25 @@ function frame(now) {
 }
 
 // Background ticker: keeps training going while the tab is hidden.
+// A Web Worker timer is barely throttled in background tabs, unlike
+// setInterval on the page. Falls back to setInterval if workers fail.
 let bgSaves = 0;
-setInterval(() => {
+function bgTick() {
   if (!document.hidden) return;
   logicStep();
   if (++bgSaves % 10 === 0) save(state);
-}, 1000);
+}
+try {
+  const src = 'setInterval(() => postMessage(0), 1000);';
+  const worker = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+  worker.onmessage = bgTick;
+} catch {
+  setInterval(bgTick, 1000);
+}
+// When a frozen tab wakes up again, catch up right away.
+document.addEventListener('resume', () => { logicStep(); save(state); });
+window.addEventListener('pageshow', () => logicStep());
+window.addEventListener('focus', () => logicStep());
 
 document.addEventListener('visibilitychange', () => {
   audio.setPaused(document.hidden);
