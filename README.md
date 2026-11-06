@@ -13,7 +13,9 @@ training away. After that it never ends.
 
 ## Play
 
-Open `index.html` through any static web server, or play it on GitHub Pages.
+**Play online: https://sxrg1u.github.io/ballking/**
+
+Or run it locally:
 
 ```bash
 python3 -m http.server 8000
