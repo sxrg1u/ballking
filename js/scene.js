@@ -5,16 +5,16 @@ import { drawPlayer, drawBall, drawBallShadow, drawMachine } from './sprites.js'
 export const MAX_VISIBLE_BALLS = 12;
 export const MAX_VISUAL_RATE = 2.2; // passes per second per drawn ball
 
-const GY = 152;          // ground line under the player's feet
-const PX = 64;           // player x
-const SX = PX + 9;       // where the ball leaves the foot
-const WX = WALL_X - 3;   // where the ball hits the wall
+const GY = 99;           // ground line under the player's feet
+const PX = 58;           // player x (close to the wall)
+const SX = PX + 10;      // where the ball leaves the foot
+const WX = WALL_X - 4;   // where the ball hits the wall
 
 // Lane offsets (pseudo depth) and arc heights so many balls stay readable.
 const LANES = [
-  { dz: 0, arc: 3 }, { dz: -4, arc: 16 }, { dz: 4, arc: 8 }, { dz: -2, arc: 26 },
-  { dz: 6, arc: 2 }, { dz: -6, arc: 12 }, { dz: 2, arc: 20 }, { dz: -3, arc: 5 },
-  { dz: 5, arc: 30 }, { dz: -5, arc: 1 }, { dz: 3, arc: 14 }, { dz: -1, arc: 36 },
+  { dz: 0, arc: 3 }, { dz: -3, arc: 14 }, { dz: 3, arc: 7 }, { dz: -2, arc: 22 },
+  { dz: 4, arc: 2 }, { dz: -4, arc: 10 }, { dz: 2, arc: 18 }, { dz: -1, arc: 5 },
+  { dz: 4, arc: 26 }, { dz: -3, arc: 1 }, { dz: 1, arc: 12 }, { dz: -2, arc: 30 },
 ];
 
 export class Scene {
@@ -22,7 +22,7 @@ export class Scene {
     this.c = canvas.getContext('2d');
     this.overlay = overlay;
     this.balls = [];
-    this.ground = 0;
+    this.ground = 'g0';
     this.look = null;
     this.kick = -1;
     this.t = 0;
@@ -57,7 +57,7 @@ export class Scene {
       if (b.mode === 'normal' && prev < 0.5 && b.phase >= 0.5) {
         const ok = Math.random() < p;
         if (!ok) b.mode = 'fail';
-        onPass(ok, WX, GY + b.lane.dz - 6);
+        onPass(ok, WX, GY + b.lane.dz - 10);
       }
       if (b.phase >= 1) {
         b.phase -= 1;
@@ -74,26 +74,26 @@ export class Scene {
     const { dz, arc } = b.lane;
     let x, h;
     if (b.mode === 'retrieve') {
-      x = -20 + (SX + 20) * b.phase;
-      h = Math.abs(Math.sin(b.phase * Math.PI * 3)) * 6 * (1 - b.phase);
+      x = -10 + (SX + 10) * b.phase;
+      h = Math.abs(Math.sin(b.phase * Math.PI * 3)) * 5 * (1 - b.phase);
     } else if (b.phase < 0.5) {
       const u = b.phase / 0.5;
       x = SX + (WX - SX) * u; h = arc * Math.sin(Math.PI * u);
     } else if (b.mode === 'fail') {
       const u = (b.phase - 0.5) / 0.5;
-      x = WX - (WX + 30) * u; h = 80 * Math.sin(Math.PI * Math.min(u * 0.8, 1)) + u * 10;
+      x = WX - (WX + 20) * u; h = 60 * Math.sin(Math.PI * Math.min(u * 0.8, 1)) + u * 10;
     } else {
       const u = (b.phase - 0.5) / 0.5;
       x = WX - (WX - SX) * u; h = arc * 0.6 * Math.sin(Math.PI * u);
     }
-    return { x, y: GY + dz - 2 - h, gy: GY + dz, h };
+    return { x, y: GY + dz - 3 - h, gy: GY + dz, h };
   }
 
   draw() {
     const c = this.c;
     c.drawImage(background(this.ground), 0, 0);
     if (!this.reducedMotion) drawDynamic(c, this.ground, this.t);
-    for (let i = 0; i < this.machines; i++) drawMachine(c, 6 + i * 12, HORIZON + 12);
+    for (let i = 0; i < this.machines; i++) drawMachine(c, 2 + i * 16, HORIZON + 14);
 
     const pos = this.balls.map(b => ({ b, ...this.ballPos(b) }));
     const back = pos.filter(p => p.b.lane.dz < 0), front = pos.filter(p => p.b.lane.dz >= 0);
@@ -110,8 +110,8 @@ export class Scene {
     const cols = ['#f4c430', '#ffffff', '#e94b3c', '#2a62c9', '#1d9a5b', '#ff3d8b'];
     for (let i = 0; i < n; i++) {
       this.particles.push({
-        x: Math.random() * W, y: -10 - Math.random() * 40,
-        vx: (Math.random() - 0.5) * 40, vy: 20 + Math.random() * 40,
+        x: Math.random() * W, y: -10 - Math.random() * 30,
+        vx: (Math.random() - 0.5) * 30, vy: 15 + Math.random() * 30,
         col: cols[i % cols.length], life: 3 + Math.random() * 2,
       });
     }

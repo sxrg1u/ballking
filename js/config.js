@@ -26,7 +26,8 @@ export const MIN_ONEOFF_COST = 25;
 
 // Training grounds = chapters. Each owned ground multiplies all TP.
 export const GROUNDS = [
-  { id: 'g0', name: 'Backyard Wall',        rating: 1,   mult: 3, desc: 'A cracked brick wall behind the house.' },
+  { id: 'g0', name: 'Ruined Lot',           rating: 1,   mult: 3, desc: 'A crumbling wall on an empty lot. It is a start.' },
+  { id: 'g9', name: 'Backyard Wall',        rating: 8,   mult: 3, desc: 'A real brick wall behind the house. No holes!' },
   { id: 'g1', name: 'Cage Court',           rating: 15,  mult: 3, desc: 'Street court with a graffiti wall.' },
   { id: 'g2', name: 'Club Ground',          rating: 35,  mult: 3, desc: 'Your first real club, with a wooden rebounder.' },
   { id: 'g3', name: 'Pro Training Center',  rating: 55,  mult: 3, desc: 'Perfect grass and a target board.' },

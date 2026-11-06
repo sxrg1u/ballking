@@ -7,6 +7,8 @@ import { fmt, pct, setNotation } from './format.js';
 import * as audio from './audio.js';
 import { save, load, wipe, exportSave, importSave } from './save.js';
 import { COUNTRIES } from './stars.js';
+import { icon } from './icons.js';
+import { drawPortrait } from './sprites.js';
 
 
 const $ = id => document.getElementById(id);
@@ -17,7 +19,7 @@ const game = {
   get state() { return state; },
   tps: () => E.tpPerSec(state, state.streak, state.highestRating),
   onBuy(id, n) {
-    if (E.buyUpgrade(state, id, n)) { audio.buy(); syncScene(); ui.refresh(); }
+    if (E.buyUpgrade(state, id, n)) { audio.buy(); syncScene(); ui.refresh(); ui.flash(id); }
   },
   onBuyOne(id) {
     if (!E.buyOneOff(state, id)) return;
@@ -55,13 +57,24 @@ function lookFor(s) {
   const boots = E.bootsColor(s);
   return {
     skin: star.skin, hair: star.hair, style: star.style, beard: star.beard, kit: star.kit,
-    boots, barefoot: !!star.street && !boots, aura: s.highestRating >= 99,
+    boots, barefoot: !!star.street && !boots, street: !!star.street, aura: s.highestRating >= 99,
   };
 }
 
+let portraitKey = '';
 function syncScene() {
   scene.look = lookFor(state);
-  scene.ground = E.activeGround(state);
+  // Player card: portrait, kit stripe, legend glow
+  const key = JSON.stringify(scene.look);
+  if (key !== portraitKey) {
+    portraitKey = key;
+    drawPortrait($('portrait'), scene.look);
+    const k = scene.look.kit;
+    $('fut-kit').style.background = `linear-gradient(90deg, ${k.shirt} 0 50%, ${k.shorts} 50%)`;
+    $('fut-nation').textContent = E.currentStar(state.highestRating).nation;
+  }
+  $('fut').classList.toggle('legend', state.highestRating >= 99);
+  scene.ground = GROUNDS[E.activeGround(state)].id;
   scene.ballColors = E.ballColors(state, DEFAULT_BALL_COLORS);
   scene.setBallCount(E.ballCount(state));
 }
@@ -143,10 +156,12 @@ function updateHud() {
   $('player-meta').textContent = (star.origin || COUNTRIES[star.nation] || star.nation) +
     (s.highestRating >= 99 ? `  ★ x${s.highestRating - 99}` : '');
   $('xp-bar').style.width = (prog.frac * 100).toFixed(1) + '%';
-  $('xp-text').textContent = `${fmt(s.xp - prog.from)} / ${fmt(prog.to - prog.from)} to ${prog.rating + 1}`;
-  $('next-player').textContent = next ? `Next: ${next.name} (${next.rating})` : 'Legend mode';
+  $('xp-text').textContent = `${fmt(s.xp - prog.from)} / ${fmt(prog.to - prog.from)}  (${Math.floor(prog.frac * 100)}%)`;
+  $('next-player').innerHTML = next ? `Next player: <b>${next.rating === 99 ? '???' : next.name}</b> at rating ${next.rating}` : `Legend mode: <b>rating ${s.highestRating + 1}</b> next`;
 
   $('streak').textContent = fmt(s.streak);
+  $('streak-chip').classList.toggle('hot', s.streak >= 20);
+  $('tpp').textContent = fmt(E.tpPerPass(s, s.streak, s.highestRating), 1);
   $('streak-mult').textContent = 'x' + E.streakMult(s, s.streak).toFixed(2);
   const balls = E.ballCount(s);
   $('balls').textContent = balls > MAX_VISIBLE_BALLS ? `${fmt(balls)} (${MAX_VISIBLE_BALLS} shown)` : balls;
@@ -187,6 +202,9 @@ window.addEventListener('pointerdown', startAudio, { once: true });
 window.addEventListener('keydown', startAudio, { once: true });
 
 // ---------- Start ----------
+$('coin').src = icon('coin', 30);
+$('fire').src = icon('fire', 20);
+document.querySelectorAll('img[data-icon]').forEach(el => { el.src = icon(el.dataset.icon, 20); });
 resetScene();
 applySettings();
 ui.render();

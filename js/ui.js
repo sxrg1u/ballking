@@ -3,6 +3,14 @@ import { UPGRADES, UPGRADE_ORDER, GROUNDS, COACHES, GEAR } from './config.js';
 import { STARS, COUNTRIES } from './stars.js';
 import * as E from './engine.js';
 import { fmt, fmtTime, pct } from './format.js';
+import { img } from './icons.js';
+import { drawPortrait } from './sprites.js';
+import { thumbnail } from './backgrounds.js';
+import { MILESTONE_EVERY } from './config.js';
+
+const UP_ICON = { tempo: 'tempo', tech: 'tech', control: 'control', stamina: 'stamina', balls: 'balls' };
+const oneIcon = it => (it.type === 'ball' ? 'ball' : it.type === 'boots' ? 'boots' : it.id[0] === 'c' ? 'coach' : 'ground');
+export const starLook = st => ({ skin: st.skin, hair: st.hair, style: st.style, beard: st.beard, kit: st.kit, street: !!st.street, barefoot: !!st.street });
 
 const $ = sel => document.querySelector(sel);
 
@@ -27,6 +35,8 @@ export class UI {
     document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
     this.render();
     if (view === 'career') {
+      // Draw every player portrait into its canvas
+      this.viewEl.querySelectorAll('canvas[data-star]').forEach(cv => drawPortrait(cv, starLook(STARS[cv.dataset.star])));
       const cur = this.viewEl.querySelector('li.current');
       if (cur) cur.scrollIntoView({ block: 'center' });
     }
@@ -51,27 +61,27 @@ export class UI {
   upgradesHTML() {
     const subs = [['training', 'Training'], ['gear', 'Gear'], ['coaches', 'Coaches'], ['grounds', 'Grounds']];
     let h = `<div class="subtabs">${subs.map(([k, n]) =>
-      `<button data-sub="${k}" class="${this.sub === k ? 'active' : ''}">${n}</button>`).join('')}</div>`;
+      `<button data-sub="${k}" class="${this.sub === k ? 'active' : ''}">${n}<span class="dot hidden" data-dot="${k}"></span></button>`).join('')}</div>`;
     if (this.sub === 'training') {
       const amt = this.s.settings.buyAmount;
       h += `<div class="amount">BUY ${[1, 10, 100, 'max'].map(a =>
         `<button data-amount="${a}" class="${amt === a ? 'active' : ''}">${a === 'max' ? 'MAX' : 'x' + a}</button>`).join('')}</div>`;
       h += UPGRADE_ORDER.map(id => `
         <div class="up" data-up="${id}">
-          <div><h4>${UPGRADES[id].name}<span class="lvl"></span></h4></div>
-          <div class="desc">${UPGRADES[id].desc}</div>
+          <div class="icon-tile">${img(UP_ICON[id], 40)}<span class="lvl-badge"></span></div>
+          <h4>${UPGRADES[id].name}</h4>
           <div class="eff"></div>
-          <div class="afford"><div></div></div>
+          <div class="mile">${['tempo', 'tech'].includes(id) ? '<span class="mtext"></span><div class="mbar"><div></div></div>' : `<span>${UPGRADES[id].desc}</span>`}</div>
           <button class="buy" data-buy="${id}"></button>
         </div>`).join('');
     } else {
       const list = this.sub === 'gear' ? GEAR : this.sub === 'coaches' ? COACHES : GROUNDS;
       h += list.map(it => `
         <div class="up" data-one="${it.id}">
-          <div><h4>${it.name}</h4></div>
-          <div class="desc">${it.desc}</div>
-          <div class="eff">x${it.mult} all Training Points</div>
-          <div class="afford"><div></div></div>
+          <div class="icon-tile">${img(oneIcon(it), 40)}</div>
+          <h4>${it.name}</h4>
+          <div class="eff"><b>x${it.mult}</b> all Training Points</div>
+          <div class="mile"><span>${it.desc}</span></div>
           <button class="buy" data-buyone="${it.id}"></button>
         </div>`).join('');
     }
@@ -104,52 +114,79 @@ export class UI {
 
   refreshUpgrades() {
     const s = this.s;
+    const coin = img('coin', 14, 'c');
+    const costBtn = (cost, n) => `${n > 1 ? 'BUY x' + n : 'BUY'}<span class="cost">${coin}${fmt(cost)}</span>`;
     this.viewEl.querySelectorAll('[data-up]').forEach(el => {
-      const id = el.dataset.up, n = this.amountFor(id);
-      const cost = E.upgradeCost(id, s.levels[id], n);
-      el.querySelector('.lvl').textContent = 'Lv ' + s.levels[id];
+      const id = el.dataset.up, n = this.amountFor(id), L = s.levels[id];
+      const cost = E.upgradeCost(id, L, n), can = cost <= s.tp;
+      el.querySelector('.lvl-badge').textContent = 'LV ' + L;
       el.querySelector('.eff').innerHTML = this.effectText(id, n);
+      const mt = el.querySelector('.mtext');
+      if (mt) {
+        const next = (Math.floor(L / MILESTONE_EVERY) + 1) * MILESTONE_EVERY;
+        mt.textContent = `x2 at LV ${next}`;
+        el.querySelector('.mbar div').style.width = ((L % MILESTONE_EVERY) / MILESTONE_EVERY * 100) + '%';
+      }
       const btn = el.querySelector('.buy');
-      btn.innerHTML = `${n > 1 ? 'x' + n + '<br>' : ''}${fmt(cost)} TP`;
-      btn.disabled = cost > s.tp;
-      el.querySelector('.afford div').style.width = Math.min(100, s.tp / cost * 100) + '%';
+      const html = costBtn(cost, n);
+      if (btn.dataset.h !== html) { btn.innerHTML = html; btn.dataset.h = html; }
+      btn.disabled = !can;
+      btn.style.setProperty('--p', Math.min(100, s.tp / cost * 100) + '%');
+      el.classList.toggle('can', can);
     });
     this.viewEl.querySelectorAll('[data-one]').forEach(el => {
       const it = E.findOneOff(el.dataset.one);
       const btn = el.querySelector('.buy');
       const owned = !!s.owned[it.id], unlocked = E.isUnlocked(s, it);
+      const cost = E.oneOffCost(it), can = !owned && unlocked && cost <= s.tp;
       el.classList.toggle('owned', owned);
       el.classList.toggle('locked', !unlocked && !owned);
-      const cost = E.oneOffCost(it);
-      if (owned) { btn.innerHTML = 'OWNED'; btn.disabled = true; }
-      else if (!unlocked) { btn.innerHTML = `RATING<br>${it.rating}`; btn.disabled = true; }
-      else { btn.innerHTML = `${fmt(cost)} TP`; btn.disabled = cost > s.tp; }
-      el.querySelector('.afford div').style.width = owned ? '100%' : unlocked ? Math.min(100, s.tp / cost * 100) + '%' : '0%';
+      el.classList.toggle('can', can);
+      const html = owned ? 'OWNED' : !unlocked ? `LOCKED<span class="cost">RATING ${it.rating}</span>` : costBtn(cost, 1);
+      if (btn.dataset.h !== html) { btn.innerHTML = html; btn.dataset.h = html; }
+      btn.disabled = !can;
+      btn.style.setProperty('--p', owned || !unlocked ? '0%' : Math.min(100, s.tp / cost * 100) + '%');
     });
+    // Green dot on sub-tabs that have something affordable
+    const groups = { training: null, gear: GEAR, coaches: COACHES, grounds: GROUNDS };
+    for (const [k, list] of Object.entries(groups)) {
+      const dot = this.viewEl.querySelector(`[data-dot="${k}"]`);
+      if (!dot) continue;
+      const any = list
+        ? list.some(it => !s.owned[it.id] && E.isUnlocked(s, it) && E.oneOffCost(it) <= s.tp)
+        : UPGRADE_ORDER.some(id => E.upgradeCost(id, s.levels[id]) <= s.tp);
+      dot.classList.toggle('hidden', !any);
+    }
+  }
+
+  // Short pop animation on a card after buying
+  flash(id) {
+    const el = this.viewEl.querySelector(`[data-up="${id}"], [data-one="${id}"]`);
+    if (!el) return;
+    el.classList.remove('bought'); void el.offsetWidth; el.classList.add('bought');
   }
 
   // ---------- Career ----------
   careerHTML() {
     const s = this.s, r = s.highestRating, cur = E.currentStar(r);
-    let h = `<div class="section-title">PLAYER LADDER</div><ul class="ladder">`;
-    for (const st of STARS) {
+    let h = `<div class="section-title">TRAINING GROUNDS</div><div class="grounds">`;
+    for (const g of GROUNDS) {
+      const owned = !!s.owned[g.id], open = E.isUnlocked(s, g);
+      const cls = owned ? 'owned' : open ? '' : 'locked';
+      const label = owned ? 'Owned' : open ? 'Available' : 'Rating ' + g.rating;
+      h += `<div class="gcard ${cls}"><img src="${thumbnail(g.id)}" alt="${g.name}"><div>${g.name}<small>${label}</small></div></div>`;
+    }
+    h += `</div><div class="section-title">PLAYER LADDER</div><ul class="ladder">`;
+    STARS.forEach((st, i) => {
       const state = st === cur ? 'current' : st.rating < cur.rating ? 'done' : 'locked';
       const label = state === 'current' ? 'YOU' : state === 'done' ? 'Played' : 'Rating ' + st.rating;
-      h += `<li class="${state}"><span class="r">${st.rating}</span>
-        <span class="n">${st.name}<small>${st.origin || COUNTRIES[st.nation]}</small></span>
+      h += `<li class="${state}"><span class="r">${st.rating}</span><canvas data-star="${i}" width="40" height="40"></canvas>
+        <span class="n">${state === 'locked' && st.rating === 99 ? '???' : st.name}<small>${st.origin || COUNTRIES[st.nation]}</small></span>
         <span class="s">${label}</span></li>`;
-    }
-    if (r >= 99) {
-      h += `<li class="current"><span class="r">${r}</span><span class="n">Legend mode<small>${r - 99} legend stars</small></span><span class="s">Endless</span></li>`;
-    } else {
-      h += `<li class="locked"><span class="r">100+</span><span class="n">Legend mode<small>Keep improving forever</small></span><span class="s">Endless</span></li>`;
-    }
-    h += `</ul><div class="section-title">TRAINING GROUNDS</div><ul class="ladder">`;
-    for (const g of GROUNDS) {
-      const state = s.owned[g.id] ? 'done' : E.isUnlocked(s, g) ? 'current' : 'locked';
-      const label = s.owned[g.id] ? 'Owned' : E.isUnlocked(s, g) ? 'Available' : 'Rating ' + g.rating;
-      h += `<li class="${state === 'current' ? '' : state}"><span class="r">${g.rating}</span><span class="n">${g.name}<small>${g.desc}</small></span><span class="s">${label}</span></li>`;
-    }
+    });
+    h += r >= 99
+      ? `<li class="current"><span class="r">${r}</span><span></span><span class="n">Legend mode<small>${r - 99} legend stars</small></span><span class="s">Endless</span></li>`
+      : `<li class="locked"><span class="r">100+</span><span></span><span class="n">Legend mode<small>Keep improving forever</small></span><span class="s">Endless</span></li>`;
     return h + '</ul>';
   }
 

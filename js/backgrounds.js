@@ -1,6 +1,8 @@
-// Pixel backgrounds for each training ground. Static parts are pre-rendered
-// once into an offscreen canvas; a few effects are animated every frame.
-export const W = 320, H = 180, HORIZON = 128, WALL_X = 290, WALL_W = 14, WALL_TOP = 62;
+// Pixel backgrounds for every training ground (192x108 scene).
+// Static parts are pre-rendered once; ambient effects animate per frame.
+// The grounds go from a ruined lot to a stadium in space.
+export const W = 192, H = 108, HORIZON = 70;
+export const WALL_X = 146, WALL_W = 22, WALL_TOP = 12, WALL_BOTTOM = 104;
 
 function rng(seed) {
   return () => {
@@ -10,200 +12,314 @@ function rng(seed) {
     return ((t ^ t >>> 14) >>> 0) / 4294967296;
   };
 }
+const rect = (c, x, y, w, h, col) => { c.fillStyle = col; c.fillRect(Math.round(x), Math.round(y), w, h); };
 
-const rect = (c, x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
-
-function sky(c, cols) {
-  const band = Math.ceil(HORIZON / cols.length);
-  cols.forEach((col, i) => rect(c, 0, i * band, W, band, col));
+// Banded pixel sky with dithered transitions.
+function sky(c, cols, bottom = HORIZON) {
+  const band = Math.ceil(bottom / cols.length);
+  cols.forEach((col, i) => {
+    rect(c, 0, i * band, W, band, col);
+    if (i > 0) for (let x = (i % 2); x < W; x += 2) rect(c, x, i * band - 1, 1, 1, col);
+  });
 }
 
-function grass(c, a, b, stripe = 20) {
-  for (let x = 0; x < W; x += stripe) rect(c, x, HORIZON, stripe, H - HORIZON, (x / stripe) % 2 ? a : b);
-  rect(c, 0, HORIZON, W, 1, 'rgba(0,0,0,0.15)');
+function stripes(c, a, b, w = 16, top = HORIZON) {
+  for (let x = 0; x < W; x += w) rect(c, x, top, w, H - top, (x / w) % 2 ? a : b);
+  rect(c, 0, top, W, 1, 'rgba(0,0,0,0.2)');
+  // Grass texture
+  const R = rng(99);
+  for (let i = 0; i < 160; i++) rect(c, R() * W, top + 2 + R() * (H - top), 1, 1, 'rgba(0,0,0,0.08)');
 }
 
-function houses(c, R) {
-  const cols = ['#c98b6b', '#d8c39a', '#9fb4c7', '#c7a2a2', '#b7c79f'];
-  for (let x = -10; x < WALL_X; x += 28 + Math.floor(R() * 12)) {
-    const h = 22 + Math.floor(R() * 20), w = 24 + Math.floor(R() * 10);
-    const col = cols[Math.floor(R() * cols.length)];
-    rect(c, x, HORIZON - h, w, h, col);
-    rect(c, x - 2, HORIZON - h - 3, w + 4, 3, '#7a4a3a');
-    for (let wy = HORIZON - h + 5; wy < HORIZON - 6; wy += 8)
-      for (let wx = x + 4; wx < x + w - 4; wx += 8) rect(c, wx, wy, 3, 4, '#3d4b5c');
+// The wall: front face + side face for depth + cap.
+function wallBase(c, face, side, cap) {
+  rect(c, WALL_X, WALL_TOP, WALL_W, WALL_BOTTOM - WALL_TOP, face);
+  rect(c, WALL_X + WALL_W, WALL_TOP + 2, 5, WALL_BOTTOM - WALL_TOP - 2, side);
+  rect(c, WALL_X - 1, WALL_TOP - 3, WALL_W + 7, 3, cap);
+  rect(c, WALL_X - 1, WALL_TOP - 3, WALL_W + 7, 1, 'rgba(255,255,255,0.25)');
+  rect(c, WALL_X, WALL_TOP, 2, WALL_BOTTOM - WALL_TOP, 'rgba(255,255,255,0.12)');
+  rect(c, WALL_X - 3, WALL_BOTTOM - 1, WALL_W + 12, 3, 'rgba(0,0,0,0.3)'); // contact shadow
+}
+
+function bricks(c, x0, y0, w, h, mortar, R, cracked = 0) {
+  for (let y = y0; y < y0 + h; y += 5) {
+    rect(c, x0, y, w, 1, mortar);
+    const off = (y / 5) % 2 ? 0 : 4;
+    for (let x = x0 + off; x < x0 + w; x += 8) rect(c, x, y, 1, 5, mortar);
+    if (R) for (let x = x0; x < x0 + w; x += 8) if (R() < 0.3) rect(c, x + 2, y + 2, 3, 1, 'rgba(255,255,255,0.08)');
   }
-}
-
-function crowdStands(c, R, standCol, roofCol, crowdCols, top = 40) {
-  rect(c, 0, top, W, HORIZON - top, standCol);
-  rect(c, 0, top - 6, W, 6, roofCol);
-  for (let y = top + 4; y < HORIZON - 12; y += 4) {
-    rect(c, 0, y + 3, W, 1, 'rgba(0,0,0,0.18)');
-    for (let x = 1; x < W; x += 3) {
-      if (R() < 0.85) rect(c, x, y, 2, 2, crowdCols[Math.floor(R() * crowdCols.length)]);
+  if (cracked && R) {
+    for (let k = 0; k < cracked; k++) {
+      let x = x0 + 3 + R() * (w - 6), y = y0 + R() * h * 0.6;
+      for (let i = 0; i < 14; i++) { rect(c, x, y, 1, 1, '#2a1a14'); x += R() < 0.5 ? -1 : 1; y += 1; }
     }
   }
-  // Advertising boards
+}
+
+function clouds(c, R, n, col) {
+  for (let i = 0; i < n; i++) {
+    const x = R() * W, y = 4 + R() * 26, w = 14 + R() * 20;
+    rect(c, x, y, w, 4, col); rect(c, x + 3, y - 3, w * 0.5, 3, col); rect(c, x + w * 0.4, y - 5, w * 0.35, 3, col);
+  }
+}
+
+function crowd(c, R, top, bottom, base, cols, density = 0.85) {
+  rect(c, 0, top, W, bottom - top, base);
+  for (let y = top + 2; y < bottom - 2; y += 4) {
+    rect(c, 0, y + 3, W, 1, 'rgba(0,0,0,0.25)');
+    for (let x = 1; x < W; x += 3) if (R() < density) {
+      const col = cols[Math.floor(R() * cols.length)];
+      rect(c, x, y, 2, 2, col);
+      rect(c, x, y + 2, 2, 1, 'rgba(0,0,0,0.3)');
+    }
+  }
+}
+
+function adBoards(c, y) {
   const ads = ['#e94b3c', '#2a62c9', '#f4c430', '#1d9a5b', '#f2f2f2', '#8e44ad'];
-  for (let x = 0; x < W; x += 32) {
-    rect(c, x, HORIZON - 9, 32, 9, ads[(x / 32) % ads.length]);
-    rect(c, x + 6, HORIZON - 6, 20, 2, 'rgba(255,255,255,0.6)');
+  for (let x = 0; x < W; x += 24) {
+    rect(c, x, y, 24, 6, ads[(x / 24) % ads.length]);
+    rect(c, x + 4, y + 2, 14, 2, 'rgba(255,255,255,0.55)');
+    rect(c, x, y + 5, 24, 1, 'rgba(0,0,0,0.35)');
   }
 }
 
-// ---- Walls ----
-function brickWall(c, base, mortar) {
-  rect(c, WALL_X, WALL_TOP, WALL_W, 160 - WALL_TOP, base);
-  for (let y = WALL_TOP; y < 160; y += 4) {
-    rect(c, WALL_X, y, WALL_W, 1, mortar);
-    const off = (y / 4) % 2 ? 0 : 3;
-    for (let x = WALL_X + off; x < WALL_X + WALL_W; x += 6) rect(c, x, y, 1, 4, mortar);
-  }
-  rect(c, WALL_X - 1, WALL_TOP - 2, WALL_W + 2, 2, mortar);
-}
-
-function plainWall(c, base, edge, deco) {
-  rect(c, WALL_X, WALL_TOP, WALL_W, 160 - WALL_TOP, base);
-  rect(c, WALL_X, WALL_TOP, 2, 160 - WALL_TOP, edge);
-  rect(c, WALL_X - 1, WALL_TOP - 2, WALL_W + 2, 2, edge);
-  if (deco) deco(c);
-}
-
-// ---- Grounds ----
-const BUILDERS = [
-  // 0 Backyard Wall
-  c => {
-    const R = rng(1);
-    sky(c, ['#7fb8e0', '#8ec4e8', '#a0cfee', '#b5dbf2']);
-    rect(c, 40, 18, 10, 10, '#ffe27a'); rect(c, 38, 20, 14, 6, '#ffe27a');
-    houses(c, R);
-    rect(c, 0, HORIZON, W, H - HORIZON, '#8b6b43');
-    for (let i = 0; i < 90; i++) rect(c, Math.floor(R() * W), HORIZON + Math.floor(R() * 50), 3 + Math.floor(R() * 6), 2, R() < 0.6 ? '#5a8f3a' : '#7a5c38');
-    // Washing line
-    rect(c, 120, 92, 1, 36, '#5a4632'); rect(c, 200, 92, 1, 36, '#5a4632'); rect(c, 120, 93, 81, 1, '#ddd');
-    [['#e94b3c', 132], ['#2a62c9', 150], ['#f4c430', 170]].forEach(([col, x]) => rect(c, x, 94, 8, 9, col));
-    brickWall(c, '#a4462f', '#6b2d1e');
+// ---------- Grounds ----------
+const BUILDERS = {
+  // Ruined Lot: smog, broken buildings, rubble, a wall with holes
+  g0: c => {
+    const R = rng(11);
+    sky(c, ['#6d6a63', '#7a766c', '#878173', '#948c7b', '#9e9480']);
+    rect(c, 20, 10, 7, 7, '#c9b98a'); // hazy sun
+    // Broken buildings
+    for (const [x, w, h] of [[-4, 30, 38], [24, 22, 26], [44, 34, 44], [78, 26, 30], [104, 30, 40]]) {
+      rect(c, x, HORIZON - h, w, h, '#57534c');
+      for (let k = 0; k < 4; k++) rect(c, x + R() * w, HORIZON - h - 2, 3 + R() * 5, 3, '#6d6a63'); // broken top
+      for (let wy = HORIZON - h + 4; wy < HORIZON - 4; wy += 7)
+        for (let wx = x + 3; wx < x + w - 3; wx += 6) rect(c, wx, wy, 3, 4, R() < 0.25 ? '#3a3631' : '#24211d');
+      rect(c, x + w - 2, HORIZON - h, 2, h, '#4a4640');
+      if (R() < 0.6) rect(c, x + 4, HORIZON - h - 6, 1, 6, '#3d2a1c'); // rebar
+    }
+    // Smog band
+    for (let x = 0; x < W; x += 2) rect(c, x, 38 + (x % 4 ? 0 : 1), 1, 1, 'rgba(160,150,130,0.5)');
+    // Cracked dirt
+    rect(c, 0, HORIZON, W, H - HORIZON, '#6e5a42');
+    for (let i = 0; i < 140; i++) rect(c, R() * W, HORIZON + R() * 40, 1 + R() * 4, 1, R() < 0.5 ? '#5a4834' : '#7d6a50');
+    for (let k = 0; k < 6; k++) { let x = R() * 140, y = HORIZON + 4 + R() * 28; for (let i = 0; i < 10; i++) { rect(c, x, y, 1, 1, '#3e3124'); x += 1; y += R() < 0.5 ? 0 : (R() < 0.5 ? 1 : -1); } }
+    // Rubble piles, tyre, trash bags, puddle
+    for (const [x, y] of [[6, 92], [118, 80], [30, 76]]) for (let i = 0; i < 9; i++) rect(c, x + R() * 14, y + R() * 5, 2 + R() * 3, 2, ['#8a857c', '#6b675f', '#a39d92'][i % 3]);
+    rect(c, 96, 96, 12, 4, '#1c1c1f'); rect(c, 99, 97, 6, 2, '#3a3a3f');
+    rect(c, 10, 74, 8, 6, '#1e2a22'); rect(c, 16, 75, 6, 5, '#243126'); rect(c, 12, 73, 2, 1, '#3a4a3e');
+    rect(c, 60, 100, 26, 3, '#7d8a90'); rect(c, 64, 100, 10, 1, '#a7b4ba');
+    // Broken street lamp (light is animated)
+    rect(c, 128, 26, 2, 44, '#3a3632'); rect(c, 122, 24, 9, 2, '#3a3632'); rect(c, 121, 26, 4, 2, '#5a554e');
+    // Wall with holes and cracks
+    wallBase(c, '#8c5a44', '#5e3a2b', '#6e4535');
+    bricks(c, WALL_X, WALL_TOP, WALL_W, WALL_BOTTOM - WALL_TOP, '#4e3124', R, 4);
+    for (const [x, y, w, h] of [[WALL_X + 4, 30, 7, 5], [WALL_X + 12, 58, 6, 7], [WALL_X + 2, 80, 5, 4]]) {
+      rect(c, x, y, w, h, '#2a1d16'); rect(c, x + 1, y + 1, w - 2, h - 2, '#948c7b');
+    }
+    rect(c, WALL_X + 14, WALL_TOP - 3, 13, 6, '#9e9480'); // broken top corner
+    rect(c, WALL_X + 6, 44, 9, 3, 'rgba(180,60,60,0.35)'); // faded graffiti
   },
-  // 1 Cage Court
-  c => {
+
+  // Backyard Wall: houses, washing line, solid brick wall
+  g9: c => {
+    const R = rng(1);
+    sky(c, ['#7fb4dc', '#8ec0e4', '#9fcbea', '#b2d6ef']);
+    rect(c, 24, 8, 8, 8, '#ffe27a'); rect(c, 22, 10, 12, 4, '#ffe27a');
+    const cols = ['#c98b6b', '#d8c39a', '#9fb4c7', '#c7a2a2', '#b7c79f'];
+    for (let x = -6; x < WALL_X; x += 22 + Math.floor(R() * 8)) {
+      const h = 16 + Math.floor(R() * 14), w = 20 + Math.floor(R() * 6);
+      rect(c, x, HORIZON - h, w, h, cols[Math.floor(R() * cols.length)]);
+      rect(c, x - 2, HORIZON - h - 3, w + 4, 3, '#8a4a3a');
+      for (let wy = HORIZON - h + 4; wy < HORIZON - 5; wy += 7) for (let wx = x + 3; wx < x + w - 3; wx += 7) { rect(c, wx, wy, 3, 4, '#3d4b5c'); rect(c, wx, wy, 1, 1, '#8fa8c0'); }
+    }
+    rect(c, 0, HORIZON, W, H - HORIZON, '#7d6a48');
+    for (let i = 0; i < 120; i++) rect(c, R() * W, HORIZON + R() * 40, 2 + R() * 4, 1, R() < 0.65 ? '#5a8f3a' : '#6a5838');
+    rect(c, 70, 44, 1, 26, '#5a4632'); rect(c, 122, 44, 1, 26, '#5a4632'); rect(c, 70, 45, 53, 1, '#ddd');
+    [['#e94b3c', 78], ['#2a62c9', 92], ['#f4c430', 106]].forEach(([col, x]) => { rect(c, x, 46, 7, 8, col); rect(c, x, 53, 7, 1, 'rgba(0,0,0,0.25)'); });
+    wallBase(c, '#a4462f', '#6e2b1c', '#7d3624');
+    bricks(c, WALL_X, WALL_TOP, WALL_W, WALL_BOTTOM - WALL_TOP, '#6b2d1e', R, 1);
+  },
+
+  // Cage Court: city, chain-link fence, turf, graffiti wall
+  g1: c => {
     const R = rng(2);
     sky(c, ['#86b9dc', '#94c3e3', '#a6cfe9', '#bad9ef']);
-    for (let x = 0; x < W; x += 22) { const h = 40 + Math.floor(R() * 45); rect(c, x, HORIZON - h, 20, h, R() < 0.5 ? '#8a94a3' : '#a2abb8'); for (let y = HORIZON - h + 4; y < HORIZON - 4; y += 6) for (let wx = x + 3; wx < x + 18; wx += 5) rect(c, wx, y, 2, 3, '#e8e0a0'); }
-    // Fence
-    for (let y = 84; y < HORIZON; y += 4) for (let x = (y / 4) % 2 ? 0 : 2; x < W; x += 4) rect(c, x, y, 1, 1, '#c3cad1');
-    for (let x = 0; x < W; x += 40) rect(c, x, 80, 2, HORIZON - 80, '#6d7680');
-    rect(c, 0, 80, W, 2, '#6d7680');
-    grass(c, '#3f8f4a', '#378043', 24);
-    rect(c, 0, 166, W, 1, '#e8e8e8');
-    plainWall(c, '#9a9a9a', '#7a7a7a', cc => {
-      rect(cc, WALL_X + 3, 80, 9, 12, '#e94b3c'); rect(cc, WALL_X + 5, 98, 8, 9, '#2ad1c9');
-      rect(cc, WALL_X + 2, 112, 10, 6, '#f4c430'); rect(cc, WALL_X + 4, 126, 9, 10, '#8e44ad');
-    });
+    clouds(c, R, 0, '#fff');
+    for (let x = 0; x < W; x += 16) {
+      const h = 28 + Math.floor(R() * 32), col = R() < 0.5 ? '#7d8796' : '#97a1ae';
+      rect(c, x, HORIZON - h, 15, h, col);
+      for (let y = HORIZON - h + 3; y < HORIZON - 3; y += 5) for (let wx = x + 2; wx < x + 13; wx += 4) rect(c, wx, y, 2, 3, R() < 0.4 ? '#f0e6a0' : '#4d5868');
+    }
+    for (let y = 40; y < HORIZON; y += 3) for (let x = (y / 3) % 2 ? 0 : 1.5; x < W; x += 3) rect(c, x, y, 1, 1, 'rgba(210,216,222,0.8)');
+    for (let x = 0; x < W; x += 30) rect(c, x, 36, 2, HORIZON - 36, '#5d6670');
+    rect(c, 0, 36, W, 2, '#5d6670');
+    stripes(c, '#3f8f4a', '#378043', 16);
+    rect(c, 0, 92, WALL_X, 1, '#e8e8e8');
+    wallBase(c, '#9a9a9a', '#6e6e6e', '#7a7a7a');
+    for (let y = WALL_TOP + 8; y < WALL_BOTTOM; y += 12) rect(c, WALL_X, y, WALL_W, 1, '#838383');
+    const g = [['#e94b3c', 22, 10], ['#2ad1c9', 36, 9], ['#f4c430', 52, 7], ['#8e44ad', 66, 11], ['#ff3d8b', 82, 8]];
+    g.forEach(([col, y, h], i) => { rect(c, WALL_X + 2 + (i % 2) * 5, y, 13, h, col); rect(c, WALL_X + 4 + (i % 2) * 5, y + 2, 9, 2, '#ffffff'); rect(c, WALL_X + 2 + (i % 2) * 5, y + h, 13, 1, '#1a1a1a'); });
   },
-  // 2 Club Ground
-  c => {
+
+  // Club Ground: trees, clubhouse, wooden rebounder
+  g2: c => {
     const R = rng(3);
     sky(c, ['#78b4e0', '#88bfe6', '#9ccbeb', '#b2d8f0']);
-    for (let x = -8; x < W; x += 18) { const h = 18 + Math.floor(R() * 14); rect(c, x, HORIZON - h - 8, 18, h, R() < 0.5 ? '#2f6b34' : '#3a7a3c'); rect(c, x + 7, HORIZON - 10, 3, 10, '#5a4030'); }
-    rect(c, 60, 92, 70, 36, '#ece6d8'); rect(c, 56, 86, 78, 7, '#b5402f');
-    for (let x = 66; x < 126; x += 12) rect(c, x, 100, 6, 8, '#3d5a7a');
-    rect(c, 90, 112, 10, 16, '#6b4a30');
-    grass(c, '#4c9a3c', '#448c35', 20);
-    plainWall(c, '#8a5a2b', '#5e3c1c', cc => { for (let y = WALL_TOP + 6; y < 160; y += 7) rect(cc, WALL_X, y, WALL_W, 1, '#5e3c1c'); });
+    for (let x = -6; x < W; x += 13) {
+      const h = 14 + Math.floor(R() * 10);
+      rect(c, x, HORIZON - h - 6, 14, h, R() < 0.5 ? '#2f6b34' : '#3a7a3c');
+      rect(c, x + 2, HORIZON - h - 6, 6, 3, '#4c8f48');
+      rect(c, x + 6, HORIZON - 7, 2, 7, '#5a4030');
+    }
+    rect(c, 36, 40, 54, 30, '#ece6d8'); rect(c, 32, 34, 62, 6, '#b5402f'); rect(c, 32, 34, 62, 1, '#d4614f');
+    for (let x = 42; x < 86; x += 10) { rect(c, x, 46, 5, 7, '#3d5a7a'); rect(c, x, 46, 5, 1, '#9ab8d6'); }
+    rect(c, 60, 58, 7, 12, '#6b4a30');
+    rect(c, 46, 28, 1, 6, '#888'); rect(c, 47, 28, 8, 4, '#1d7a3a');
+    stripes(c, '#4c9a3c', '#448c35', 16);
+    wallBase(c, '#9a6634', '#64401c', '#7a4f26');
+    for (let y = WALL_TOP + 7; y < WALL_BOTTOM; y += 7) { rect(c, WALL_X, y, WALL_W, 1, '#5e3c1c'); rect(c, WALL_X + 3 + (y % 14 ? 0 : 9), y - 4, 1, 1, '#3a2410'); }
   },
-  // 3 Pro Training Center
-  c => {
+
+  // Pro Training Center: glass building, target board
+  g3: c => {
     const R = rng(4);
     sky(c, ['#8ac4ec', '#9ccff0', '#b0daf4', '#c4e4f7']);
-    rect(c, 30, 60, 140, 68, '#5f7d99');
-    for (let y = 64; y < 124; y += 8) for (let x = 34; x < 166; x += 10) rect(c, x, y, 8, 6, R() < 0.3 ? '#cfe6f7' : '#8fb3d1');
-    rect(c, 190, 88, 80, 40, '#e6e6e6'); rect(c, 186, 84, 88, 4, '#2a62c9');
-    rect(c, 0, HORIZON - 6, W, 6, '#2e6b33');
-    grass(c, '#3fa34d', '#379445', 16);
-    plainWall(c, '#ececec', '#bdbdbd', cc => {
-      rect(cc, WALL_X + 3, 120, 9, 14, '#2a62c9'); rect(cc, WALL_X + 5, 123, 5, 8, '#f2f2f2'); rect(cc, WALL_X + 6, 125, 3, 4, '#e94b3c');
-    });
+    rect(c, 10, 24, 90, 46, '#5f7d99');
+    for (let y = 27; y < 66; y += 6) for (let x = 13; x < 97; x += 7) rect(c, x, y, 5, 4, R() < 0.3 ? '#d7ecfa' : '#8fb3d1');
+    rect(c, 104, 46, 38, 24, '#e6e6e6'); rect(c, 102, 43, 42, 3, '#2a62c9');
+    rect(c, 0, HORIZON - 4, W, 4, '#2e6b33');
+    stripes(c, '#3fa34d', '#379445', 12);
+    wallBase(c, '#efefef', '#b5b5b5', '#cfcfcf');
+    for (const [cy, rr] of [[40, 8], [74, 6]]) {
+      rect(c, WALL_X + 11 - rr, cy - rr, rr * 2, rr * 2, '#2a62c9');
+      rect(c, WALL_X + 11 - rr + 2, cy - rr + 2, rr * 2 - 4, rr * 2 - 4, '#f2f2f2');
+      rect(c, WALL_X + 9, cy - 2, 4, 4, '#e94b3c');
+    }
   },
-  // 4 National Academy
-  c => {
+
+  // National Academy: big building, flags, net rebounder
+  g4: c => {
     sky(c, ['#6fa8d8', '#80b4de', '#94c1e5', '#aacfec']);
-    rect(c, 20, 70, 200, 58, '#d8d2c4'); rect(c, 16, 64, 208, 7, '#8a8070');
-    for (let x = 30; x < 210; x += 14) rect(c, x, 80, 8, 30, '#3d5a7a');
-    const flags = [['#d0202f', '#f2f2f2'], ['#1c2f6b', '#f2f2f2'], ['#f7d117', '#1d9a5b'], ['#f36c21', '#f2f2f2'], ['#1d7a3a', '#f2f2f2']];
-    flags.forEach(([a, b], i) => { const x = 232 + i * 11; rect(c, x, 60, 1, 68, '#888'); rect(c, x + 1, 60, 8, 3, a); rect(c, x + 1, 63, 8, 3, b); });
-    grass(c, '#3d9b47', '#358b3f', 18);
-    plainWall(c, '#3a3f48', '#22262c', cc => {
-      for (let y = WALL_TOP + 4; y < 156; y += 4) rect(cc, WALL_X + 2, y, WALL_W - 3, 1, '#9aa3ad');
-      for (let x = WALL_X + 3; x < WALL_X + WALL_W; x += 4) rect(cc, x, WALL_TOP + 2, 1, 156 - WALL_TOP, '#9aa3ad');
-    });
+    rect(c, 6, 30, 110, 40, '#d8d2c4'); rect(c, 3, 26, 116, 4, '#8a8070');
+    for (let x = 12; x < 112; x += 9) { rect(c, x, 36, 5, 22, '#3d5a7a'); rect(c, x, 36, 5, 2, '#9ab8d6'); }
+    rect(c, 50, 58, 22, 12, '#6b5a40');
+    const flags = [['#d0202f', '#f2f2f2'], ['#1c2f6b', '#f2f2f2'], ['#f7d117', '#1d9a5b'], ['#f36c21', '#f2f2f2']];
+    flags.forEach(([a, b], i) => { const x = 122 + i * 6; rect(c, x, 18, 1, 52, '#999'); rect(c, x + 1, 18, 5, 2, a); rect(c, x + 1, 20, 5, 2, b); });
+    stripes(c, '#3d9b47', '#358b3f', 14);
+    wallBase(c, '#30353d', '#1c1f24', '#454b55');
+    for (let y = WALL_TOP + 3; y < WALL_BOTTOM - 2; y += 3) rect(c, WALL_X + 2, y, WALL_W - 3, 1, '#a7b0ba');
+    for (let x = WALL_X + 3; x < WALL_X + WALL_W - 1; x += 3) rect(c, x, WALL_TOP + 2, 1, WALL_BOTTOM - WALL_TOP - 4, '#a7b0ba');
+    rect(c, WALL_X, WALL_TOP, WALL_W, 2, '#f4c430'); rect(c, WALL_X, WALL_BOTTOM - 2, WALL_W, 2, '#f4c430');
   },
-  // 5 Big Stadium
-  c => {
+
+  // Big Stadium
+  g5: c => {
     const R = rng(6);
-    sky(c, ['#6aa6dc', '#7cb2e0', '#90bfe6']);
-    crowdStands(c, R, '#4a5260', '#2c323c', ['#d0202f', '#f2f2f2', '#2a62c9', '#f4c430', '#e8b48a', '#7a4a2a', '#1d9a5b']);
-    grass(c, '#3fa34d', '#36924a', 22);
-    plainWall(c, '#14161c', '#2c323c', cc => { for (let y = WALL_TOP + 6; y < 158; y += 10) rect(cc, WALL_X + 3, y, WALL_W - 5, 2, '#2a62c9'); });
+    sky(c, ['#6aa6dc', '#7cb2e0', '#90bfe6'], 24);
+    rect(c, 0, 14, W, 6, '#2c323c'); rect(c, 0, 14, W, 1, '#4a5260');
+    crowd(c, R, 20, HORIZON - 6, '#4a5260', ['#d0202f', '#f2f2f2', '#2a62c9', '#f4c430', '#e8b48a', '#7a4a2a', '#1d9a5b']);
+    adBoards(c, HORIZON - 6);
+    stripes(c, '#3fa34d', '#36924a', 14);
+    wallBase(c, '#111319', '#2a2e38', '#3a404c');
+    for (let y = WALL_TOP + 5; y < WALL_BOTTOM - 4; y += 9) rect(c, WALL_X + 3, y, WALL_W - 6, 3, '#2a62c9');
   },
-  // 6 Night Stadium
-  c => {
+
+  // Night Stadium
+  g6: c => {
     const R = rng(7);
-    sky(c, ['#070b1c', '#0b1128', '#111a38', '#1a2550']);
-    crowdStands(c, R, '#1d222c', '#0e1118', ['#5a5f6b', '#3a3f4a', '#7a3a3a', '#3a4a7a', '#6b6040']);
-    for (const x of [20, 150, 260]) { rect(c, x, 4, 2, 40, '#555'); rect(c, x - 8, 2, 18, 6, '#fffbe0'); }
-    grass(c, '#2f8a3e', '#297a37', 22);
-    plainWall(c, '#0c0e14', '#2c323c', cc => { for (let y = WALL_TOP + 6; y < 158; y += 10) rect(cc, WALL_X + 3, y, WALL_W - 5, 2, '#ff3d8b'); });
+    sky(c, ['#070b1c', '#0b1128', '#111a38'], 24);
+    for (const x of [14, 96]) { rect(c, x, 2, 2, 18, '#555'); rect(c, x - 6, 0, 14, 5, '#fffbe0'); rect(c, x - 5, 1, 12, 1, '#ffffff'); }
+    rect(c, 0, 16, W, 6, '#0e1118');
+    crowd(c, R, 22, HORIZON - 6, '#1a1e28', ['#5a5f6b', '#3a3f4a', '#7a3a3a', '#3a4a7a', '#6b6040']);
+    adBoards(c, HORIZON - 6);
+    stripes(c, '#2f8a3e', '#297a37', 14);
+    wallBase(c, '#08090d', '#22262e', '#2c323c');
+    for (let y = WALL_TOP + 5; y < WALL_BOTTOM - 4; y += 9) rect(c, WALL_X + 3, y, WALL_W - 6, 3, '#ff3d8b');
   },
-  // 7 Golden Stadium
-  c => {
+
+  // Golden Stadium
+  g7: c => {
     const R = rng(8);
-    sky(c, ['#f6c565', '#f8b46e', '#fba57a', '#fd9a82']);
-    crowdStands(c, R, '#8a6a20', '#5e4510', ['#f4c430', '#fff2b0', '#d9a520', '#f2f2f2', '#75aadb']);
-    grass(c, '#5aa83c', '#4f9a33', 22);
-    plainWall(c, '#d9a520', '#a07400', cc => { for (let y = WALL_TOP + 5; y < 158; y += 9) rect(cc, WALL_X + 3, y, WALL_W - 5, 1, '#fff2b0'); });
+    sky(c, ['#f6c565', '#f8b46e', '#fba57a'], 24);
+    rect(c, 0, 14, W, 6, '#5e4510'); rect(c, 0, 14, W, 1, '#d9a520');
+    crowd(c, R, 20, HORIZON - 6, '#8a6a20', ['#f4c430', '#fff2b0', '#d9a520', '#f2f2f2', '#75aadb']);
+    adBoards(c, HORIZON - 6);
+    stripes(c, '#5aa83c', '#4f9a33', 14);
+    wallBase(c, '#e0ad2a', '#9a6e00', '#f4c430');
+    for (let y = WALL_TOP + 6; y < WALL_BOTTOM; y += 8) rect(c, WALL_X + 2, y, WALL_W - 4, 1, '#fff2b0');
   },
-  // 8 Star Stadium
-  c => {
+
+  // Star Stadium
+  g8: c => {
     const R = rng(9);
     sky(c, ['#12062a', '#1d0b3d', '#2a1255', '#3d1a6b']);
-    for (let i = 0; i < 80; i++) rect(c, Math.floor(R() * W), Math.floor(R() * 100), 1, 1, R() < 0.3 ? '#fff2b0' : '#c9c2ff');
-    rect(c, 210, 20, 24, 24, '#8e5bd1'); rect(c, 206, 26, 32, 12, '#8e5bd1'); rect(c, 200, 31, 44, 2, '#e3c9ff');
-    rect(c, 0, 110, W, HORIZON - 110, '#24123f');
-    for (let x = 1; x < W; x += 3) if (R() < 0.7) rect(c, x, 114 + Math.floor(R() * 8), 2, 2, ['#f4c430', '#c9c2ff', '#ff3d8b'][Math.floor(R() * 3)]);
-    grass(c, '#2a7d6b', '#236b5c', 22);
-    plainWall(c, '#4a1f80', '#2a1050', cc => { for (let y = WALL_TOP + 6; y < 158; y += 8) rect(cc, WALL_X + 3, y, WALL_W - 5, 1, '#e3c9ff'); });
+    for (let i = 0; i < 70; i++) rect(c, R() * W, R() * 56, 1, 1, R() < 0.3 ? '#fff2b0' : '#c9c2ff');
+    rect(c, 104, 8, 18, 18, '#8e5bd1'); rect(c, 104, 8, 18, 4, '#a97ce6'); rect(c, 96, 16, 34, 2, '#e3c9ff');
+    crowd(c, R, 52, HORIZON, '#24123f', ['#f4c430', '#c9c2ff', '#ff3d8b', '#2ad1c9'], 0.6);
+    stripes(c, '#2a7d6b', '#236b5c', 14);
+    wallBase(c, '#4a1f80', '#2a1050', '#6a35b0');
+    for (let y = WALL_TOP + 6; y < WALL_BOTTOM; y += 8) rect(c, WALL_X + 3, y, WALL_W - 6, 1, '#e3c9ff');
   },
-];
+};
 
-const cache = [];
-export function background(idx) {
-  if (!cache[idx]) {
+const cache = {};
+export function background(id) {
+  if (!cache[id]) {
     const cv = document.createElement('canvas');
     cv.width = W; cv.height = H;
-    BUILDERS[idx](cv.getContext('2d'));
-    cache[idx] = cv;
+    (BUILDERS[id] || BUILDERS.g0)(cv.getContext('2d'));
+    cache[id] = cv;
   }
-  return cache[idx];
+  return cache[id];
 }
 
+// Small preview for the Career list.
+export function thumbnail(id) {
+  return background(id).toDataURL();
+}
+
+const DAY = ['g9', 'g1', 'g2', 'g3', 'g4'];
+const STADIUM = ['g5', 'g6', 'g7'];
+
 // Animated extras drawn on top of the static background.
-export function drawDynamic(c, idx, t) {
-  if (idx === 5 || idx === 6 || idx === 7) {
-    // Crowd bounce / phone flashes
-    const R = rng(Math.floor(t * 4));
-    for (let i = 0; i < (idx === 6 ? 14 : 8); i++) {
-      const x = Math.floor(R() * W), y = 44 + Math.floor(R() * 70);
-      c.fillStyle = idx === 6 ? '#ffffff' : 'rgba(255,255,255,0.7)';
-      c.fillRect(x, y, 1, 1);
+export function drawDynamic(c, id, t) {
+  if (DAY.includes(id)) {
+    // Slowly drifting clouds
+    c.fillStyle = 'rgba(255,255,255,0.85)';
+    for (let i = 0; i < 3; i++) {
+      const x = ((t * (2 + i) + i * 80) % (W + 60)) - 40, y = 6 + i * 7;
+      c.fillRect(Math.round(x), y, 22, 4); c.fillRect(Math.round(x) + 4, y - 3, 11, 3);
     }
   }
-  if (idx === 6) {
-    c.fillStyle = 'rgba(255,250,220,0.06)';
-    for (const x of [20, 150, 260]) { c.beginPath(); c.moveTo(x - 8, 6); c.lineTo(x + 10, 6); c.lineTo(x + 60, HORIZON + 30); c.lineTo(x - 50, HORIZON + 30); c.fill(); }
+  if (id === 'g0') {
+    // Dust drifting, flickering lamp
+    for (let i = 0; i < 14; i++) {
+      const x = (i * 37 + t * (4 + (i % 3))) % W, y = 20 + ((i * 23 + Math.sin(t + i) * 6) % 70);
+      c.fillStyle = 'rgba(200,190,160,0.45)';
+      c.fillRect(Math.round(x), Math.round(y), 1, 1);
+    }
+    const on = Math.sin(t * 13) + Math.sin(t * 3.1) > 0.4;
+    c.fillStyle = on ? '#ffe9a0' : '#5a554e';
+    c.fillRect(121, 26, 4, 2);
+    if (on) { c.fillStyle = 'rgba(255,233,160,0.12)'; c.fillRect(114, 28, 18, 42); }
   }
-  if (idx === 8) {
+  if (STADIUM.includes(id)) {
+    const R = rng(Math.floor(t * 5));
+    for (let i = 0; i < (id === 'g6' ? 16 : 8); i++) {
+      c.fillStyle = id === 'g6' ? '#ffffff' : 'rgba(255,255,255,0.75)';
+      c.fillRect(Math.floor(R() * W), 22 + Math.floor(R() * 40), 1, 1);
+    }
+  }
+  if (id === 'g6') {
+    c.fillStyle = 'rgba(255,250,220,0.07)';
+    for (const x of [14, 96]) { c.beginPath(); c.moveTo(x - 6, 4); c.lineTo(x + 8, 4); c.lineTo(x + 44, H); c.lineTo(x - 30, H); c.fill(); }
+  }
+  if (id === 'g8') {
     const R = rng(Math.floor(t * 2));
-    for (let i = 0; i < 6; i++) { c.fillStyle = '#ffffff'; c.fillRect(Math.floor(R() * W), Math.floor(R() * 100), 1, 1); }
+    c.fillStyle = '#ffffff';
+    for (let i = 0; i < 6; i++) c.fillRect(Math.floor(R() * W), Math.floor(R() * 56), 1, 1);
   }
 }
