@@ -95,6 +95,7 @@ function resetScene() {
 function applySettings() {
   setNotation(state.settings.notation);
   scene.reducedMotion = state.settings.reducedMotion;
+  document.body.classList.toggle('reduce-motion', state.settings.reducedMotion);
   audio.applySettings(state.settings);
 }
 

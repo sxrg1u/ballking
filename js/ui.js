@@ -15,12 +15,33 @@ export const starLook = st => ({ skin: st.skin, hair: st.hair, style: st.style, 
 
 const $ = sel => document.querySelector(sel);
 
+function enableArrowNavigation(root, selector, select) {
+  root.addEventListener('keydown', e => {
+    if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(e.key)) return;
+    const tabs = [...root.querySelectorAll(selector)];
+    const current = tabs.indexOf(e.target.closest(selector));
+    if (current < 0 || !tabs.length) return;
+    e.preventDefault();
+    const next = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1
+      : (current + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length;
+    tabs[next].focus();
+    select(tabs[next]);
+  });
+}
+
 export class UI {
   constructor(game) {
     this.g = game;              // { state, onBuy, onSettings, onExport, onImport, onReset }
     this.view = 'upgrades';
     this.sub = 'training';
     this.viewEl = $('#view');
+    $('#tabs').querySelectorAll('button[data-view]').forEach(b => { b.tabIndex = b.dataset.view === this.view ? 0 : -1; });
+    enableArrowNavigation($('#tabs'), 'button[data-view]', b => this.show(b.dataset.view));
+    enableArrowNavigation(this.viewEl, 'button[data-sub]', b => {
+      this.sub = b.dataset.sub;
+      this.render();
+      this.viewEl.querySelector(`[data-sub="${this.sub}"]`)?.focus();
+    });
     $('#tabs').addEventListener('click', e => {
       const b = e.target.closest('button[data-view]');
       if (b) this.show(b.dataset.view);
@@ -33,7 +54,13 @@ export class UI {
 
   show(view) {
     this.view = view;
-    document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+    document.querySelectorAll('#tabs button').forEach(b => {
+      const active = b.dataset.view === view;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-selected', String(active));
+      b.tabIndex = active ? 0 : -1;
+    });
+    this.viewEl.setAttribute('aria-labelledby', `tab-${view}`);
     this.render();
     if (view === 'career') {
       // Draw every player portrait into its canvas
@@ -61,23 +88,25 @@ export class UI {
   // ---------- Upgrades ----------
   upgradesHTML() {
     const subs = [['training', 'Training'], ['gear', 'Gear'], ['coaches', 'Coaches'], ['grounds', 'Grounds']];
-    let h = `<div class="subtabs">${subs.map(([k, n]) =>
-      `<button data-sub="${k}" class="${this.sub === k ? 'active' : ''}">${n}<span class="dot hidden" data-dot="${k}"></span></button>`).join('')}</div>`;
+    let h = `<div class="subtabs" role="tablist" aria-label="Upgrade categories">${subs.map(([k, n]) =>
+      `<button id="subtab-${k}" role="tab" tabindex="${this.sub === k ? 0 : -1}" aria-controls="upgrade-category-content" aria-selected="${this.sub === k}" data-sub="${k}" class="${this.sub === k ? 'active' : ''}">${n}<span class="dot hidden" data-dot="${k}"></span></button>`).join('')}</div>`;
+    let body = '';
     if (this.sub === 'training') {
       const amt = this.s.settings.buyAmount;
-      h += `<div class="amount">BUY ${[1, 10, 100, 'max'].map(a =>
+      body += `<div class="shop-heading"><div><span class="eyebrow">TRAINING PLAN</span><h3>Build your game</h3><p>Best return for your selected buy amount is highlighted.</p></div><div class="shop-rate"><strong data-shop-rate></strong><span>earning rate</span></div></div>`;
+      body += `<div class="amount"><span>BUY AMOUNT</span>${[1, 10, 100, 'max'].map(a =>
         `<button data-amount="${a}" class="${amt === a ? 'active' : ''}">${a === 'max' ? 'MAX' : 'x' + a}</button>`).join('')}</div>`;
-      h += UPGRADE_ORDER.map(id => `
+      body += UPGRADE_ORDER.map(id => `
         <div class="up" data-up="${id}">
           <div class="icon-tile">${img(UP_ICON[id], 40)}<span class="lvl-badge"></span></div>
-          <h4>${UPGRADES[id].name}</h4>
+          <h4>${UPGRADES[id].name}<span class="best-pick hidden">BEST VALUE</span></h4>
           <div class="eff"></div>
           <div class="mile">${['tempo', 'tech'].includes(id) ? '<span class="mtext"></span><div class="mbar"><div></div></div>' : `<span>${UPGRADES[id].desc}</span>`}</div>
           <button class="buy" data-buy="${id}"></button>
         </div>`).join('');
     } else {
       const list = this.sub === 'gear' ? GEAR : this.sub === 'coaches' ? COACHES : GROUNDS;
-      h += list.map(it => `
+      body += list.map(it => `
         <div class="up" data-one="${it.id}">
           <div class="icon-tile">${img(oneIcon(it), 40)}</div>
           <h4>${it.name}</h4>
@@ -86,7 +115,7 @@ export class UI {
           <button class="buy" data-buyone="${it.id}"></button>
         </div>`).join('');
     }
-    return h;
+    return h + `<div id="upgrade-category-content" role="tabpanel" aria-labelledby="subtab-${this.sub}" tabindex="0">${body}</div>`;
   }
 
   amountFor(id) {
@@ -116,10 +145,24 @@ export class UI {
   refreshUpgrades() {
     const s = this.s;
     const coin = img('coin', 14, 'c');
-    const costBtn = (cost, n) => `${n > 1 ? 'BUY x' + n : 'BUY'}<span class="cost">${coin}${fmt(cost)}</span>`;
+    const baseline = this.g.tps();
+    const candidates = UPGRADE_ORDER.map(id => {
+      const n = this.amountFor(id), cost = E.upgradeCost(id, s.levels[id], n);
+      const old = s.levels[id];
+      s.levels[id] += n;
+      const gain = this.g.tps() - baseline;
+      s.levels[id] = old;
+      return { id, score: Number.isFinite(cost) && cost > 0 ? gain / cost : 0 };
+    }).filter(x => x.score > 0 && Number.isFinite(x.score)).sort((a, b) => b.score - a.score);
+    const bestId = candidates[0]?.id;
+    const rate = this.viewEl.querySelector('[data-shop-rate]');
+    if (rate) rate.textContent = '+' + fmt(baseline, 1) + '/s';
+    const costBtn = (cost, n, can, progress) => `${n > 1 ? 'BUY x' + n : 'BUY'}<span class="cost">${coin}${fmt(cost)}</span><span class="buy-progress">${can ? 'READY' : fmt(progress * 100, 0) + '% FUNDED'}</span>`;
     this.viewEl.querySelectorAll('[data-up]').forEach(el => {
       const id = el.dataset.up, n = this.amountFor(id), L = s.levels[id];
       const cost = E.upgradeCost(id, L, n), can = cost <= s.tp;
+      el.classList.toggle('recommended', id === bestId);
+      el.querySelector('.best-pick').classList.toggle('hidden', id !== bestId);
       el.querySelector('.lvl-badge').textContent = 'LV ' + L;
       el.querySelector('.eff').innerHTML = this.effectText(id, n);
       const mt = el.querySelector('.mtext');
@@ -129,9 +172,10 @@ export class UI {
         el.querySelector('.mbar div').style.width = ((L % MILESTONE_EVERY) / MILESTONE_EVERY * 100) + '%';
       }
       const btn = el.querySelector('.buy');
-      const html = costBtn(cost, n);
+      const html = costBtn(cost, n, can, Math.min(1, s.tp / cost));
       if (btn.dataset.h !== html) { btn.innerHTML = html; btn.dataset.h = html; }
       btn.disabled = !can;
+      btn.setAttribute('aria-label', `${n > 1 ? `Buy ${n} levels of` : 'Buy'} ${UPGRADES[id].name} for ${fmt(cost)} Training Points. ${can ? 'Ready to buy.' : `${fmt(Math.min(100, s.tp / cost * 100), 0)} percent funded.`}`);
       btn.style.setProperty('--p', Math.min(100, s.tp / cost * 100) + '%');
       el.classList.toggle('can', can);
     });
@@ -143,9 +187,10 @@ export class UI {
       el.classList.toggle('owned', owned);
       el.classList.toggle('locked', !unlocked && !owned);
       el.classList.toggle('can', can);
-      const html = owned ? 'OWNED' : !unlocked ? `LOCKED<span class="cost">RATING ${it.rating}</span>` : costBtn(cost, 1);
+      const html = owned ? 'OWNED' : !unlocked ? `LOCKED<span class="cost">RATING ${it.rating}</span>` : costBtn(cost, 1, can, Math.min(1, s.tp / cost));
       if (btn.dataset.h !== html) { btn.innerHTML = html; btn.dataset.h = html; }
       btn.disabled = !can;
+      btn.setAttribute('aria-label', owned ? `${it.name}, owned.` : !unlocked ? `${it.name}, unlocked at rating ${it.rating}.` : `Buy ${it.name} for ${fmt(cost)} Training Points. ${can ? 'Ready to buy.' : `${fmt(Math.min(100, s.tp / cost * 100), 0)} percent funded.`}`);
       btn.style.setProperty('--p', owned || !unlocked ? '0%' : Math.min(100, s.tp / cost * 100) + '%');
     });
     // Green dot on sub-tabs that have something affordable

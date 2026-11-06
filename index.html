@@ -64,13 +64,13 @@
     </section>
 
     <aside class="panel">
-      <nav class="tabs" id="tabs">
-        <button data-view="upgrades" class="active"><img data-icon="upgrades" alt=""><span>Upgrades</span></button>
-        <button data-view="career"><img data-icon="career" alt=""><span>Career</span></button>
-        <button data-view="stats"><img data-icon="stats" alt=""><span>Stats</span></button>
-        <button data-view="settings"><img data-icon="settings" alt=""><span>Settings</span></button>
+      <nav class="tabs" id="tabs" role="tablist" aria-label="Game sections">
+        <button role="tab" aria-selected="true" aria-controls="view" id="tab-upgrades" data-view="upgrades" class="active"><img data-icon="upgrades" alt=""><span>Upgrades</span></button>
+        <button role="tab" aria-selected="false" aria-controls="view" id="tab-career" data-view="career"><img data-icon="career" alt=""><span>Career</span></button>
+        <button role="tab" aria-selected="false" aria-controls="view" id="tab-stats" data-view="stats"><img data-icon="stats" alt=""><span>Stats</span></button>
+        <button role="tab" aria-selected="false" aria-controls="view" id="tab-settings" data-view="settings"><img data-icon="settings" alt=""><span>Settings</span></button>
       </nav>
-      <div class="view" id="view"></div>
+      <div class="view" id="view" role="tabpanel" aria-labelledby="tab-upgrades" tabindex="0"></div>
     </aside>
   </main>
 
